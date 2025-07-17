@@ -1,60 +1,74 @@
 package main
 
 import (
-	"fmt"
+	"database/sql"
 	"log"
 	"net/http"
-	"sync/atomic"
 	"os"
-	"database/sql"
-	"github.com/joho/godotenv"
-	"github.com/nickg76/chirpy/internal/database"
+	"sync/atomic"
+	"fmt"
 
+	"github.com/nickg76/chirpy/internal/database"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
-	DB *database.Queries
+	db             *database.Queries
+	platform       string
 }
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env files, do they exist?")
-	}
-	const filepathRoot = "./app/"
+	const filepathRoot = "./app"
 	const port = "8080"
 
-	dburl := os.Getenv("DB_URL")
-	db, err := sql.Open("postgres", dburl)
-	if err != nil {
-		log.Fatalf("Failed to connect to the database: %v", err)
+	godotenv.Load()
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		log.Fatal("DB_URL must be set")
 	}
-	defer db.Close()
-	dbQueries := database.New(db)
+	platform := os.Getenv("PLATFORM")
+	if platform == "" {
+		log.Fatal("PLATFORM must be set")
+	}
+
+	dbConn, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("Error opening database: %s", err)
+	}
+	dbQueries := database.New(dbConn)
 
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
-		DB: dbQueries,
+		db:             dbQueries,
+		platform:       platform,
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot)))))
-	mux.HandleFunc("GET /admin/healthz", handlerReadiness)
-	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
+	fsHandler := apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot))))
+	mux.Handle("/app/", fsHandler)
+
+	mux.HandleFunc("GET /api/healthz", handlerReadiness)
+
+	mux.HandleFunc("POST /api/users", apiCfg.handlerUsersCreate)
+
+	mux.HandleFunc("POST /api/chirps", apiCfg.handlerChirpsCreate)
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerChirpsRetrieve)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerChirpsGet)
+
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
-	mux.HandleFunc("/api/validate_chirp", apiCfg.validateChirpHandler)
-	mux.HandleFunc("POST /api/users", apiCfg.handleCreateUsr)
+	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
 		Handler: mux,
 	}
 
+	log.Printf("Serving on port: %s\n", port)
 	fmt.Println()
-	log.Printf("Serving files from %s on port: %s\n", filepathRoot, port)
 	fmt.Println()
-	log.Printf("Server running on: http://localhost:%s/app/\n", port)
+	log.Println("Starting server on http://localhost:8080/app/")
 	log.Fatal(srv.ListenAndServe())
 }
+
