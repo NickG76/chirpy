@@ -4,13 +4,14 @@ import (
 	"net/http"
 	"github.com/nickg76/chirpy/internal/auth"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
 func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	type loginParams struct {
 		Email	 string `json:"email"`
-		Password string `json:"passowrd"`
+		Password string `json:"password"`
 	}
 
 	var params loginParams
@@ -33,14 +34,17 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type loginResponse struct {
-		Message      string    `json:"message"`
 		ID 			 uuid.UUID `json:"id"`
+		CreatedAt    time.Time `json:"created_at"`
+		UpdatedAt    time.Time `json:"updated_at"`
 		Email 		 string    `json:"email"`
+
 	}
 
 	respondWithJSON(w, http.StatusOK, loginResponse{
-		Message: "Login successful",
-		ID: 	 user.ID,
-		Email:   user.Email,
+		ID: 	   user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
 	})
 } 
