@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nickg76/chirpy/internal/auth"
 	"github.com/nickg76/chirpy/internal/database"
 )
 
@@ -31,7 +30,7 @@ func (cfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	hashedPassword, err := auth.HashPassword(params.Password)
+	hashedPassword, err := cfg.auth.HashPassword(params.Password)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Unable to hash password", err)
 		return
