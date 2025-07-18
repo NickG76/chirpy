@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nickg76/chirpy/internal/database"
+	"github.com/nickg76/chirpy/internal/auth"
 	"github.com/google/uuid"
 )
 
