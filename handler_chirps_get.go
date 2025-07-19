@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"github.com/nickg76/chirpy/internal/database"
 
+	"sort"
 	"github.com/google/uuid"
 )
 
@@ -32,6 +33,7 @@ func (cfg *apiConfig) handlerChirpsGet(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) handlerChirpsRetrieve(w http.ResponseWriter, r *http.Request) {
 	authorIDParam := r.URL.Query().Get("author_id")
+	sortParam := r.URL.Query().Get("sort")
 	var dbChirps []database.Chirp
 	var err error
 
@@ -54,7 +56,6 @@ func (cfg *apiConfig) handlerChirpsRetrieve(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-
 	chirps := []Chirp{}
 	for _, dbChirp := range dbChirps {
 		chirps = append(chirps, Chirp{
@@ -63,6 +64,16 @@ func (cfg *apiConfig) handlerChirpsRetrieve(w http.ResponseWriter, r *http.Reque
 			UpdatedAt:  dbChirp.UpdatedAt,
 			UserID:		dbChirp.UserID,
 			Body:		dbChirp.Body,
+		})
+	}
+
+	if sortParam == "desc" {
+		sort.Slice(chirps, func(i, j int) bool{
+			return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+		})
+	} else {
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
 		})
 	}
 
