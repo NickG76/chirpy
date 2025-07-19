@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nickg76/chirpy/internal/database"
+	"github.com/nickg76/chirpy/internal/auth"
 )
 
 type User struct {
@@ -14,25 +15,30 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+	Password  string    `json:"-"`
+	IsChirpyRed bool    `json:"is_chirpy_red"`
 }
 
 func (cfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Email    string `json:"email"`
 		Password string `json:"password"`
+		Email    string `json:"email"`
+	}
+	type response struct {
+		User
 	}
 
-	var params parameters
 	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Couldn't decode parameters", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters", err)
 		return
 	}
 
-	hashedPassword, err := cfg.auth.HashPassword(params.Password)
+	hashedPassword, err := auth.HashPassword(params.Password)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to hash password", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't hash password", err)
 		return
 	}
 
@@ -45,17 +51,13 @@ func (cfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	type userResponse struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Email     string    `json:"email"`
-	}
-
-	respondWithJSON(w, http.StatusCreated, userResponse{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+	respondWithJSON(w, http.StatusCreated, response{
+		User: User{
+			ID:             user.ID,
+			CreatedAt: 		user.CreatedAt,
+			UpdatedAt: 		user.UpdatedAt,
+			Email:     		user.Email,
+			IsChirpyRed:	user.IsChirpyRed,
+		},
 	})
 }

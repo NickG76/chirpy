@@ -10,7 +10,6 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
-	"github.com/nickg76/chirpy/internal/auth"
 	"github.com/nickg76/chirpy/internal/database"
 )
 
@@ -19,7 +18,7 @@ type apiConfig struct {
 	db             *database.Queries
 	platform       string
 	jwtSecret      string
-	auth           *auth.Authorization
+	polkaKey       string
 }
 
 func main() {
@@ -39,6 +38,7 @@ func main() {
 	if jwtSecret == "" {
 		log.Fatal("JWT_SECRET not set in environment")
 	}
+	polkaKey := os.Getenv("POLKA_KEY")
 
 	dbConn, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -51,6 +51,7 @@ func main() {
 		db:             dbQueries,
 		platform:       platform,
 		jwtSecret:		jwtSecret,
+		polkaKey:       polkaKey,
 	}
 
 	mux := http.NewServeMux()
@@ -59,14 +60,19 @@ func main() {
 
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerWebhook)
+
+	mux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
+	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
+	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
+
 	mux.HandleFunc("POST /api/users", apiCfg.handlerUsersCreate)
+	mux.HandleFunc("PUT /api/users", apiCfg.handlerUsersUpdate)
 
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerChirpsCreate)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerChirpsRetrieve)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerChirpsGet)
-	mux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
-	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
-	mux.HandleFunc("POST /api/refoke", apiCfg.handlerRevoke)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handlerChirpsDelete)
 
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)

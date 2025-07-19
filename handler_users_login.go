@@ -3,81 +3,78 @@ package main
 import (
 	"net/http"
 	"github.com/nickg76/chirpy/internal/database"
+	"github.com/nickg76/chirpy/internal/auth"
 	"encoding/json"
 	"time"
-	"database/sql"
-
-	"github.com/google/uuid"
 )
-func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) { 
-	type loginParams struct {
-		Email	 			string `json:"email"`
-		Password 			string `json:"password"`
+
+func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Password string `json:"password"`
+		Email    string `json:"email"`
+	}
+	type response struct {
+		User
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
-	var params loginParams
-	err := json.NewDecoder(r.Body).Decode(&params)
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters", err)
 		return
 	}
 
 	user, err := cfg.db.GetUserByEmail(r.Context(), params.Email)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Invalid email or password", err)
+		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password", err)
 		return
 	}
 
-	err = cfg.auth.CheckPasswordHash(params.Password, user.HashedPassword)
+	err = auth.CheckPasswordHash(params.Password, user.HashedPassword)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Invalid email or password", err)	
+		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password", err)
 		return
 	}
 
-	accessToken, err := cfg.auth.MakeJWT(user.ID, cfg.jwtSecret, time.Hour)
+	accessToken, err := auth.MakeJWT(
+		user.ID,
+		cfg.jwtSecret,
+		time.Hour,
+	)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could not create token", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create access JWT", err)
 		return
 	}
-	
-	refreshToken, err := cfg.auth.MakeRefreshToken()
+
+	refreshToken, err := auth.MakeRefreshToken()
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could not create refresh token", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create refresh token", err)
 		return
 	}
 
-	now := time.Now()
-	expiresAt := now.Add(60 * 24 * time.Hour) // 60 days
-
-	err = cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
-		Token:     refreshToken,
+	_, err = cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
 		UserID:    user.ID,
-		CreatedAt: now,
-		UpdatedAt: now,
-		ExpiresAt: expiresAt,
-		RevokedAt: sql.NullTime{Valid: false},
+		Token:     refreshToken,
+		ExpiresAt: time.Now().UTC().Add(time.Hour * 24 * 60),
 	})
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could now save refresh token", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't save refresh token", err)
 		return
 	}
 
-
-	type loginResponse struct {
-		ID           uuid.UUID `json:"id"`
-		CreatedAt    time.Time `json:"created_at"`
-		UpdatedAt    time.Time `json:"updated_at"`
-		Email        string    `json:"email"`
-		Token        string    `json:"token"`
-		RefreshToken string    `json:"refresh_token"`
-	}
-
-	respondWithJSON(w, http.StatusOK, loginResponse{
-		ID:           user.ID,
-		CreatedAt:    user.CreatedAt,
-		UpdatedAt:    user.UpdatedAt,
-		Email:        user.Email,
+	respondWithJSON(w, http.StatusOK, response{
+		User: User{
+			ID:          user.ID,
+			CreatedAt:   user.CreatedAt,
+			UpdatedAt:   user.UpdatedAt,
+			Email:       user.Email,
+			IsChirpyRed: user.IsChirpyRed,
+		},
 		Token:        accessToken,
 		RefreshToken: refreshToken,
 	})
-} 
+}
+

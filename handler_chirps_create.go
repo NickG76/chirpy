@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nickg76/chirpy/internal/database"
 	"github.com/google/uuid"
+	"github.com/nickg76/chirpy/internal/auth"
+	"github.com/nickg76/chirpy/internal/database"
 )
 
 type Chirp struct {
@@ -21,25 +22,25 @@ type Chirp struct {
 
 func (cfg *apiConfig) handlerChirpsCreate(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Body   string    `json:"body"`
+		Body string `json:"body"`
 	}
 
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't find JWT", err)
+		return
+	}
+	userID, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't validate JWT", err)
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := json.NewDecoder(r.Body).Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters", err)
-		return
-	}
-
-	tokenString, err := cfg.auth.GetBearerToken(r.Header)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Missing or malformed Authorization Token", err)
-		return
-	}
-
-	userID, err := cfg.auth.ValidateJWT(tokenString, cfg.jwtSecret)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Invalid or expired token", err)
 		return
 	}
 
@@ -54,17 +55,17 @@ func (cfg *apiConfig) handlerChirpsCreate(w http.ResponseWriter, r *http.Request
 		UserID: userID,
 	})
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't Create chirp", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create chirp", err)
 		return
 	}
 
 	respondWithJSON(w, http.StatusCreated, Chirp{
-		ID:				chirp.ID,
-		CreatedAt:		chirp.CreatedAt,
-		UpdatedAt: 		chirp.UpdatedAt,
-		Body:  			chirp.Body,
-		UserID:         chirp.UserID,
-	})	
+		ID:        chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body:      chirp.Body,
+		UserID:    chirp.UserID,
+	})
 }
 
 func validateChirp(body string) (string, error) {

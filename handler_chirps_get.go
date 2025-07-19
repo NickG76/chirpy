@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"github.com/nickg76/chirpy/internal/database"
 
 	"github.com/google/uuid"
 )
@@ -21,27 +22,45 @@ func (cfg *apiConfig) handlerChirpsGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, http.StatusOK, Chirp{
-		ID:            dbChirp.ID,
-		CreatedAt:	   dbChirp.CreatedAt,
-		UpdatedAt:     dbChirp.UpdatedAt,
-		UserID:        dbChirp.UserID,
-		Body:		   dbChirp.Body,
+		ID:        dbChirp.ID,
+		CreatedAt: dbChirp.CreatedAt,
+		UpdatedAt: dbChirp.UpdatedAt,
+		UserID:    dbChirp.UserID,
+		Body:      dbChirp.Body,
 	})
 }
 
 func (cfg *apiConfig) handlerChirpsRetrieve(w http.ResponseWriter, r *http.Request) {
-	dbChirps, err := cfg.db.GetChirps(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirps", err)
-		return
+	authorIDParam := r.URL.Query().Get("author_id")
+	var dbChirps []database.Chirp
+	var err error
+
+	if authorIDParam != "" {
+		authorID, err := uuid.Parse(authorIDParam)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid author_id", err)
+			return
+		}
+
+		dbChirps, err = cfg.db.GetChirpsByUser(r.Context(), authorID)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirps", err)
+			return
+		}
+	} else {
+		dbChirps, err = cfg.db.GetChirps(r.Context())
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirps", err)
+			return
+		}
 	}
 
 	chirps := []Chirp{}
 	for _, dbChirp := range dbChirps {
 		chirps = append(chirps, Chirp{
 			ID:			dbChirp.ID,
-			CreatedAt:	dbChirp.CreatedAt,
-			UpdatedAt:	dbChirp.UpdatedAt,
+			CreatedAt:  dbChirp.CreatedAt,
+			UpdatedAt:  dbChirp.UpdatedAt,
 			UserID:		dbChirp.UserID,
 			Body:		dbChirp.Body,
 		})
@@ -49,3 +68,4 @@ func (cfg *apiConfig) handlerChirpsRetrieve(w http.ResponseWriter, r *http.Reque
 
 	respondWithJSON(w, http.StatusOK, chirps)
 }
+
